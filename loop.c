@@ -39,7 +39,8 @@
 #define WATCHDOG_TIMER		(1000 * 1000 * 10)
 
 /* Handlers */
-static u32 queuehandle, timerId;
+static u32 queuehandle;
+static u32 timerId;
 
 /* Variables */
 static u32 discovered = 0;
@@ -74,26 +75,18 @@ char *__EHCI_ParseHex(char *base, s32 *val)
 	return (ptr - 1);
 }
 
-s32 __EHCI_Ioctlv(ipcmessage *message, s32 *ack)
+s32 __EHCI_Ioctlv(s32 fd, u32 cmd, ioctlv *vector, u32 inlen, u32 iolen, s32 *ack)
 {
-	ioctlv *vector = message->ioctlv.vector;
-	u32     len_in = message->ioctlv.num_in;
-	u32     len_io = message->ioctlv.num_io;
-
-	u32 cnt;
 	s32 ret = 0;
 
 	/* Convert FD to device */
-	void *dev = ehci_fd_to_dev(message->fd);
+	void *dev = ehci_fd_to_dev(fd);
 
 	/* Invalidate cache */
-	os_sync_before_read(vector, sizeof(ioctlv) * (len_in + len_io));
-
-	for (cnt = 0; cnt < (len_in + len_io); cnt++)
-		os_sync_before_read(vector[cnt].data, vector[cnt].len);
+	InvalidateVector(vector, inlen, iolen);
 
 	/* Parse IOCTLV command */
-	switch (message->ioctlv.command) {
+	switch (cmd) {
 	case USB_IOCTL_CTRLMSG: {
 		u8    type    =  *(u8 *)vector[0].data;
 		u8    request =  *(u8 *)vector[1].data;
@@ -153,7 +146,7 @@ s32 __EHCI_Ioctlv(ipcmessage *message, s32 *ack)
 		ret = USBStorage_Init();
 
 		/* Set UMS mode */
-		ums_mode = message->fd;
+		ums_mode = fd;
 
 		break;
 	}
@@ -181,7 +174,7 @@ s32 __EHCI_Ioctlv(ipcmessage *message, s32 *ack)
 		u32   count  = *(u32 *)vector[1].data;
 
 		/* Read sectors */
-		ret =  USBStorage_Read_Sectors(lba, count, buffer);
+		ret = USBStorage_Read_Sectors(lba, count, buffer);
 
 		break;
 	}
@@ -193,7 +186,7 @@ s32 __EHCI_Ioctlv(ipcmessage *message, s32 *ack)
 		u32   count  = *(u32 *)vector[1].data;
 
 		/* Write sectors */
-		ret =  USBStorage_Write_Sectors(lba, count, buffer);
+		ret = USBStorage_Write_Sectors(lba, count, buffer);
 
 		break;
 	}
@@ -205,7 +198,7 @@ s32 __EHCI_Ioctlv(ipcmessage *message, s32 *ack)
 		u32   count  = *(u32 *)vector[1].data;
 
 		/* Read stress */
-		ret =  USBStorage_Read_Stress(lba, count, buffer);
+		ret = USBStorage_Read_Stress(lba, count, buffer);
 
 		break;
 	}
@@ -251,8 +244,7 @@ s32 __EHCI_Ioctlv(ipcmessage *message, s32 *ack)
 	}
 
 	/* Flush cache */
-	for (cnt = len_in; cnt < (len_in + len_io); cnt++)
-		os_sync_after_write(vector[cnt].data, vector[cnt].len);
+	FlushVector(vector, inlen, iolen);
 
 	return ret;
 }
@@ -295,17 +287,18 @@ void __EHCI_Watchdog(void)
 		/* Get device info */
 		nbSectors = USBStorage_Get_Capacity(&sectorSz);
 
+		/* Device available */
 		if (nbSectors) {
-			/* Allocate memory */
+			/* Allocate buffer */
 			buffer = Mem_Alloc(sectorSz);
+			if (!buffer)
+				return;
 
-			if (buffer) {
-				/* Read random sector */
-				USBStorage_Read_Sectors(rand() % nbSectors, 1, buffer);
+			/* Read random sector */
+			USBStorage_Read_Sectors(rand() % nbSectors, 1, buffer);
 
-				/* Free memory */
-				Mem_Free(buffer);
-			}
+			/* Free buffer */
+			Mem_Free(buffer);
 
 			/* Restart watchdog timer */
 			os_restart_timer(timerId, WATCHDOG_TIMER);
@@ -335,7 +328,7 @@ s32 __EHCI_Init(u32 *queuehandle, u32 *timerId)
 	os_device_register(DEVICE, ret);
 
 	/* Create watchdog timer */
-	ret = os_create_timer(WATCHDOG_TIMER, WATCHDOG_TIMER, ret, 0x666);
+	ret = os_create_timer(WATCHDOG_TIMER, WATCHDOG_TIMER, *queuehandle, 0);
 	if (ret < 0)
 		return ret;
 
@@ -358,7 +351,7 @@ s32 EHCI_Loop(void)
 	/* Main loop */
 	while (1) {
 		ipcmessage *message = NULL;
-		s32         ack     = 1;
+		s32 ack = 1;
 
 		/* Wait for message */
 		os_message_queue_receive(queuehandle, (void *)&message, 0);
@@ -366,9 +359,8 @@ s32 EHCI_Loop(void)
 		/* Stop watchdog timer */
 		os_stop_timer(timerId);
 
-
 		/* Watchdog timer */
-		if ((u32)message == 0x666) {
+		if (!message) {
 			/* Run watchdog */
 			__EHCI_Watchdog();
 
@@ -423,8 +415,13 @@ s32 EHCI_Loop(void)
 		}
 
 		case IOS_IOCTLV: {
+			ioctlv *vector = message->ioctlv.vector;
+			u32     inlen  = message->ioctlv.num_in;
+			u32     iolen  = message->ioctlv.num_io;
+			u32     cmd    = message->ioctlv.command;
+
 			/* Parse IOCTLV command */
-			ret = __EHCI_Ioctlv(message, &ack);
+			ret = __EHCI_Ioctlv(message->fd, cmd, vector, inlen, iolen, &ack);
 
 			break;
 		}

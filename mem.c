@@ -24,7 +24,7 @@
 #include "syscalls.h"
 
 /* Heap */
-static u32 heapspace[0x4000] ATTRIBUTE_ALIGN(32);
+static u32 heapspace[0x5000] ATTRIBUTE_ALIGN(32);
 
 /* Variables */
 static s32 hid = -1;

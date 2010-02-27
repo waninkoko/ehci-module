@@ -40,8 +40,10 @@ static u8 *aligned_base = 0;
 
 void *ehci_maligned(int size, int alignement, int crossing)
 {
-	if (!aligned_mem)
-		aligned_mem = aligned_base = (u8 *)(((u32)heapspace + 4095) & ~4095);
+	if (!aligned_mem) {
+		 aligned_base = (u8 *)(((u32)heapspace + 4095) & ~4095);
+		 aligned_mem  = aligned_base;
+	}
 
 	u32 addr = (u32)aligned_mem;
 
