@@ -21,7 +21,8 @@ LIBS	=
 TARGET	=	ehci-module
 
 # Objects
-OBJS	=	ipc.o			\
+OBJS	=	es.o			\
+		ipc.o			\
 		loop.o			\
 		main.o			\
 		mem.o			\

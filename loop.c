@@ -27,6 +27,7 @@
 
 #include "ehci_types.h"
 #include "ehci.h"
+#include "es.h"
 #include "ipc.h"
 #include "mem.h"
 #include "module.h"
@@ -301,7 +302,7 @@ void __EHCI_Watchdog(void)
 			Mem_Free(buffer);
 
 			/* Restart watchdog timer */
-			os_restart_timer(timerId, WATCHDOG_TIMER);
+			os_restart_timer(timerId, 0, WATCHDOG_TIMER);
 		}
 	}
 }
@@ -312,12 +313,12 @@ s32 __EHCI_Init(u32 *queuehandle, u32 *timerId)
 	s32   ret;
 
 	/* Allocate buffer*/
-	buffer = Mem_Alloc(0x40);
+	buffer = Mem_Alloc(0x80);
 	if (!buffer)
 		return IPC_ENOMEM;
 
 	/* Create message queue */
-	ret = os_message_queue_create(buffer, 16);
+	ret = os_message_queue_create(buffer, 32);
 	if (ret < 0)
 		return ret;
 
@@ -328,7 +329,7 @@ s32 __EHCI_Init(u32 *queuehandle, u32 *timerId)
 	os_device_register(DEVICE, ret);
 
 	/* Create watchdog timer */
-	ret = os_create_timer(WATCHDOG_TIMER, WATCHDOG_TIMER, *queuehandle, 0);
+	ret = os_create_timer(WATCHDOG_TIMER, WATCHDOG_TIMER, ret, 0);
 	if (ret < 0)
 		return ret;
 
@@ -372,6 +373,19 @@ s32 EHCI_Loop(void)
 		case IOS_OPEN: {
 			char *devpath  = message->open.device;
 			s32   resultfd = message->open.resultfd;
+
+			u64 tid;
+
+			/* Get title ID */
+			ret = ES_GetTitleID(&tid);
+
+			/* Check title ID */
+			if (ret >= 0) {
+				write("EHCI: Title identified. Blocking opening request.\n");
+
+				ret = IPC_ENOENT;
+				break;
+			}
 
 			/* Module device */
 			if (!strcmp(devpath, DEVICE)) {
@@ -433,7 +447,7 @@ s32 EHCI_Loop(void)
 
 
 		/* Restart watchdog timer */
-		os_restart_timer(timerId, WATCHDOG_TIMER);
+		os_restart_timer(timerId, 0, WATCHDOG_TIMER);
 
 		/* Acknowledge message */
 		if (ack)

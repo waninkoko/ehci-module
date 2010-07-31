@@ -25,15 +25,16 @@
 	.arm
 
 	.EQU	ios_thread_arg,		4
-	.EQU	ios_thread_priority,	0x48
-	.EQU	ios_thread_stacksize,	0x2000
+	.EQU	ios_thread_priority,	0x78
+	.EQU	ios_thread_stacksize,	0x3000
 
 
 	.global _start
 _start:
 	mov	r0, #0		@ int argc
 	mov	r1, #0		@ char *argv[]
-	blx	main
+	ldr	r3, =main
+	bx	r3
 
 
 
