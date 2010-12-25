@@ -175,7 +175,7 @@ s32 __EHCI_Ioctlv(s32 fd, u32 cmd, ioctlv *vector, u32 inlen, u32 iolen, s32 *ac
 		u32   count  = *(u32 *)vector[1].data;
 
 		/* Read sectors */
-		ret = USBStorage_Read_Sectors(lba, count, buffer);
+		ret = !USBStorage_Read_Sectors(lba, count, buffer);
 
 		break;
 	}
@@ -187,7 +187,7 @@ s32 __EHCI_Ioctlv(s32 fd, u32 cmd, ioctlv *vector, u32 inlen, u32 iolen, s32 *ac
 		u32   count  = *(u32 *)vector[1].data;
 
 		/* Write sectors */
-		ret = USBStorage_Write_Sectors(lba, count, buffer);
+		ret = !USBStorage_Write_Sectors(lba, count, buffer);
 
 		break;
 	}
@@ -199,7 +199,7 @@ s32 __EHCI_Ioctlv(s32 fd, u32 cmd, ioctlv *vector, u32 inlen, u32 iolen, s32 *ac
 		u32   count  = *(u32 *)vector[1].data;
 
 		/* Read stress */
-		ret = USBStorage_Read_Stress(lba, count, buffer);
+		ret = !USBStorage_Read_Stress(lba, count, buffer);
 
 		break;
 	}
